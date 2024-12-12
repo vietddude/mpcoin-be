@@ -1,0 +1,534 @@
+basePath: /api/v1
+definitions:
+  model.AuthResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/model.UserResponse'
+      wallet:
+        $ref: '#/definitions/model.WalletResponse'
+    type: object
+  model.ChainResponse:
+    properties:
+      chain_id:
+        example: 11155111
+        type: integer
+      explorer_url:
+        example: https://sepolia.etherscan.io
+        type: string
+      id:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+      name:
+        example: Sepolia
+        type: string
+      native_currency:
+        example: ETH
+        type: string
+      rpc_url:
+        example: https://ethereum-sepolia-rpc.publicnode.com
+        type: string
+    type: object
+  model.CreateAndSubmitTransactionRequest:
+    properties:
+      amount:
+        type: string
+      chain_id:
+        type: integer
+      symbol:
+        type: string
+      token_id:
+        type: string
+      wallet_id:
+        type: string
+    required:
+    - amount
+    - chain_id
+    - symbol
+    - token_id
+    - wallet_id
+    type: object
+  model.ErrorResponse:
+    properties:
+      error:
+        type: string
+      error_code:
+        type: string
+    type: object
+  model.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  model.Refresh:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  model.RefreshResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+  model.Response:
+    properties:
+      payload: {}
+    type: object
+  model.SignupRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  model.Token:
+    properties:
+      chain_id:
+        type: string
+      contract_address:
+        type: string
+      created_at:
+        type: string
+      decimals:
+        type: integer
+      id:
+        type: string
+      logo_url:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+      symbol:
+        type: string
+      type:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  model.TokenResponse:
+    properties:
+      chain_id:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+      contract_address:
+        example: "0x0000000000000000000000000000000000000000"
+        type: string
+      decimals:
+        example: 18
+        type: integer
+      id:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+      logo_url:
+        example: https://example.com/logo.png
+        type: string
+      name:
+        example: Ethereum
+        type: string
+      symbol:
+        example: ETH
+        type: string
+      type:
+        example: ERC20
+        type: string
+    type: object
+  model.Transaction:
+    properties:
+      chain_id:
+        type: integer
+      created_at:
+        type: string
+      from_address:
+        type: string
+      id:
+        type: string
+      to_address:
+        type: string
+      tx_hash:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  model.TransactionListResponse:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+      transactions:
+        items:
+          $ref: '#/definitions/model.Transaction'
+        type: array
+    type: object
+  model.UserResponse:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      id:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+    type: object
+  model.WalletResponse:
+    properties:
+      address:
+        example: "0x0000000000000000000000000000000000000000"
+        type: string
+      id:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+      name:
+        example: My Wallet
+        type: string
+      user_id:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+    type: object
+host: localhost:5001
+info:
+  contact: {}
+  description: This is the API documentation for the MPC project.
+  title: MPC API
+  version: "1.0"
+paths:
+  /assets/chains:
+    get:
+      consumes:
+      - application/json
+      description: Get all chains
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  items:
+                    $ref: '#/definitions/model.ChainResponse'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get chains
+      tags:
+      - assets
+  /assets/chains/{chain_id}/tokens:
+    get:
+      consumes:
+      - application/json
+      description: Get all tokens by chain ID
+      parameters:
+      - description: Chain ID
+        in: path
+        name: chain_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  items:
+                    $ref: '#/definitions/model.TokenResponse'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get tokens by chain ID
+      tags:
+      - assets
+  /assets/chains/{chain_id}/tokens/{symbol}:
+    get:
+      consumes:
+      - application/json
+      description: Get token by symbol
+      parameters:
+      - description: Chain ID
+        in: path
+        name: chain_id
+        required: true
+        type: integer
+      - description: Symbol
+        in: path
+        name: symbol
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  $ref: '#/definitions/model.Token'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get token by symbol
+      tags:
+      - assets
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Login to the system
+      parameters:
+      - description: Login request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  $ref: '#/definitions/model.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Login
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refresh the token
+      parameters:
+      - description: Refresh request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.Refresh'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  $ref: '#/definitions/model.RefreshResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Refresh
+      tags:
+      - auth
+  /auth/signup:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return tokens
+      parameters:
+      - description: Signup credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.SignupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  $ref: '#/definitions/model.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Login user
+      tags:
+      - auth
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Check if the server is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+      summary: Health check
+      tags:
+      - health
+  /transactions:
+    get:
+      consumes:
+      - application/json
+      description: Get all transactions by wallet address and chain ID(optional)
+      parameters:
+      - description: Chain ID
+        in: query
+        name: chain_id
+        type: string
+      - description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  $ref: '#/definitions/model.TransactionListResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get transactions
+      tags:
+      - transactions
+    post:
+      consumes:
+      - application/json
+      description: Create and submit transaction
+      parameters:
+      - description: Transaction request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.CreateAndSubmitTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  $ref: '#/definitions/model.Transaction'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Create and submit transaction
+      tags:
+      - transactions
+  /user:
+    get:
+      consumes:
+      - application/json
+      description: Get user by ID
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/model.Response'
+            - properties:
+                payload:
+                  $ref: '#/definitions/model.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/model.ErrorResponse'
+      summary: Get user
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

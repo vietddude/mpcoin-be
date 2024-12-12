@@ -1,0 +1,80 @@
+package main
+
+import (
+	_ "mpc/docs"
+	"mpc/internal/api"
+	"mpc/internal/config"
+	"mpc/internal/db"
+	"mpc/internal/db/redis"
+	"mpc/internal/repository"
+	"mpc/internal/service"
+	"mpc/pkg/ethereum"
+	"mpc/pkg/logger"
+	"mpc/pkg/token"
+)
+
+// @title MPC API
+// @version 1.0
+// @description This is the API documentation for the MPC project.
+// @host localhost:5001
+// @BasePath /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+func main() {
+	logger.Info("Starting application")
+
+	// config
+	logger.Info("Loading config")
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("Failed to load config", err)
+	}
+
+	// db
+	logger.Info("Initializing database")
+	dbPool, err := db.InitDB(&cfg.DB)
+	if err != nil {
+		logger.Error("Failed to initialize database", err)
+	}
+	defer db.CloseDB()
+
+	// redis
+	logger.Info("Initializing Redis client")
+	redisClient, err := redis.NewRedisClient(&cfg.Redis)
+	if err != nil {
+		logger.Error("Failed to initialize Redis client", err)
+	}
+	defer redisClient.Close()
+
+	// token
+	tokenManager := token.NewTokenManager(redisClient)
+
+	// ethereum
+	ethClient, err := ethereum.NewEthClient(cfg.Eth.URL)
+	if err != nil {
+		logger.Error("Failed to initialize Ethereum client", err)
+	}
+
+	// repository
+	chainRepo := repository.NewChainRepository(dbPool)
+	tokenRepo := repository.NewTokenRepository(dbPool)
+	transactionRepo := repository.NewTransactionRepository(dbPool)
+	userRepo := repository.NewUserRepository(dbPool)
+	walletRepo := repository.NewWalletRepository(dbPool)
+
+	// service
+	assetService := service.NewAssetService(chainRepo, tokenRepo, redisClient)
+	walletService := service.NewWalletService(walletRepo, ethClient)
+	userService := service.NewUserService(userRepo, walletRepo, redisClient)
+	authService := service.NewAuthService(userService, walletService, tokenManager)
+	transactionService := service.NewTransactionService(transactionRepo, walletService, assetService, ethClient)
+
+	// router
+	router := api.NewRouter(authService, assetService, userService, transactionService, tokenManager)
+
+	// run router
+	logger.Info("Running router")
+	logger.Info("Server running on port " + cfg.Port)
+	router.Run(":" + cfg.Port)
+}
