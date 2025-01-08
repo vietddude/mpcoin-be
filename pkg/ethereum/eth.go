@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"mpc/pkg/logger"
-	"time"
 
-	"github.com/avast/retry-go/v4"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -43,21 +41,12 @@ func (c *EthClient) CreateWallet() (string, string, error) {
 		return "", "", fmt.Errorf("failed to generate private key: %v", err)
 	}
 
-	// Get the public key and convert to address
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		return "", "", fmt.Errorf("error casting public key to ECDSA")
-	}
+	publicKey := privateKey.PublicKey
+	address := crypto.PubkeyToAddress(publicKey)
 
-	address := crypto.PubkeyToAddress(*publicKeyECDSA)
-
-	// Format private key as hex with 0x prefix
 	privateKeyBytes := crypto.FromECDSA(privateKey)
 	privateKeyHex := "0x" + hex.EncodeToString(privateKeyBytes)
-
-	// Format address with 0x prefix
-	addressHex := address.Hex() // This already includes 0x prefix
+	addressHex := address.Hex()
 
 	return privateKeyHex, addressHex, nil
 }
@@ -160,75 +149,36 @@ func (c *EthClient) getPrivateKeyAndSender(privateKeyHex string) (*ecdsa.Private
 	return privateKey, fromAddress, nil
 }
 
-// fetchNonce retrieves the nonce with retries
+// fetchNonce retrieves the nonce without retry
 func (c *EthClient) fetchNonce(ctx context.Context, fromAddress common.Address) (uint64, error) {
-	var nonce uint64
-	err := retry.Do(
-		func() error {
-			var err error
-			nonce, err = c.client.PendingNonceAt(ctx, fromAddress)
-			if err != nil {
-				logger.Warn("failed to fetch nonce, retrying...", zap.Error(err))
-			}
-			return err
-		},
-		retry.Attempts(3),
-		retry.Delay(2*time.Second),
-		retry.Context(ctx),
-	)
+	nonce, err := c.client.PendingNonceAt(ctx, fromAddress)
 	if err != nil {
-		return 0, fmt.Errorf("failed to fetch nonce after retries: %w", err)
+		return 0, fmt.Errorf("failed to fetch nonce: %w", err)
 	}
 	logger.Info("got nonce", zap.Uint64("nonce", nonce))
 	return nonce, nil
 }
 
-// fetchGasPrice retrieves the gas price with retries
+// fetchGasPrice retrieves the gas price without retry
 func (c *EthClient) fetchGasPrice(ctx context.Context) (*big.Int, error) {
-	var gasPrice *big.Int
-	err := retry.Do(
-		func() error {
-			var err error
-			gasPrice, err = c.client.SuggestGasPrice(ctx)
-			if err != nil {
-				logger.Warn("failed to fetch gas price, retrying...", zap.Error(err))
-			}
-			return err
-		},
-		retry.Attempts(3),
-		retry.Delay(2*time.Second),
-		retry.Context(ctx),
-	)
+	gasPrice, err := c.client.SuggestGasPrice(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch gas price after retries: %w", err)
+		return nil, fmt.Errorf("failed to fetch gas price: %w", err)
 	}
 	logger.Info("got gas price", zap.String("gas_price", gasPrice.String()))
 	return gasPrice, nil
 }
 
-// fetchChainID retrieves the chain ID with retries
+// fetchChainID retrieves the chain ID without retry
 func (c *EthClient) fetchChainID(ctx context.Context) (*big.Int, error) {
-	var chainID *big.Int
-	err := retry.Do(
-		func() error {
-			var err error
-			chainID, err = c.client.NetworkID(ctx)
-			if err != nil {
-				logger.Warn("failed to fetch network ID, retrying...", zap.Error(err))
-			}
-			return err
-		},
-		retry.Attempts(3),
-		retry.Delay(2*time.Second),
-		retry.Context(ctx),
-	)
+	chainID, err := c.client.NetworkID(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch network ID after retries: %w", err)
+		return nil, fmt.Errorf("failed to fetch network ID: %w", err)
 	}
 	return chainID, nil
 }
 
-// buildAndSendTransaction creates, signs, and sends a transaction
+// buildAndSendTransaction creates, signs, and sends a transaction without retry
 func (c *EthClient) buildAndSendTransaction(ctx context.Context, privateKey *ecdsa.PrivateKey, nonce uint64, toAddress common.Address, amountWei *big.Int, gasPrice *big.Int, chainID *big.Int) (string, error) {
 	tx := types.NewTransaction(nonce, toAddress, amountWei, 21000, gasPrice, nil)
 
@@ -237,20 +187,9 @@ func (c *EthClient) buildAndSendTransaction(ctx context.Context, privateKey *ecd
 		return "", fmt.Errorf("failed to sign transaction: %w", err)
 	}
 
-	err = retry.Do(
-		func() error {
-			err := c.client.SendTransaction(ctx, signedTx)
-			if err != nil {
-				logger.Warn("failed to send transaction, retrying...", zap.Error(err))
-			}
-			return err
-		},
-		retry.Attempts(3),
-		retry.Delay(2*time.Second),
-		retry.Context(ctx),
-	)
+	err = c.client.SendTransaction(ctx, signedTx)
 	if err != nil {
-		return "", fmt.Errorf("failed to send transaction after retries: %w", err)
+		return "", fmt.Errorf("failed to send transaction: %w", err)
 	}
 
 	return signedTx.Hash().Hex(), nil
