@@ -97,7 +97,7 @@
 
 // 	// Danh sách các địa chỉ ví để theo dõi
 // 	addresses := []string{
-// 		"0x9b6bE46ed05EE77a22928ba88cA46d9FFf09e3f8",
+// 		"0xFB122130C4d28860dbC050A8e024A71a558eB0C1",
 // 	}
 
 // 	// Chuyển đổi địa chỉ ví sang common.Address và tạo map cho việc tìm kiếm nhanh
@@ -200,7 +200,7 @@ func main() {
 
 	// Danh sách các địa chỉ ví để theo dõi
 	addresses := []string{
-		"0x9b6bE46ed05EE77a22928ba88cA46d9FFf09e3f8",
+		"0xFB122130C4d28860dbC050A8e024A71a558eB0C1",
 	}
 
 	// Chuyển đổi địa chỉ ví sang common.Address và tạo map cho việc tìm kiếm nhanh

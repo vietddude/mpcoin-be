@@ -5,8 +5,8 @@ import (
 	"mpc/internal/model"
 	"mpc/internal/repository"
 	"mpc/pkg/errors"
-	"mpc/pkg/ethereum"
 	"mpc/pkg/logger"
+	"mpc/pkg/tss"
 	"strings"
 
 	"github.com/google/uuid"
@@ -14,28 +14,32 @@ import (
 
 type WalletService struct {
 	walletRepo *repository.WalletRepository
-	ethClient  *ethereum.EthClient
+	tssClient  *tss.TSS
 }
 
-func NewWalletService(walletRepo *repository.WalletRepository, ethClient *ethereum.EthClient) *WalletService {
+func NewWalletService(walletRepo *repository.WalletRepository, tssClient *tss.TSS) *WalletService {
 	return &WalletService{
 		walletRepo: walletRepo,
-		ethClient:  ethClient,
+		tssClient:  tssClient,
 	}
 }
 
-func (s *WalletService) CreateWallet(ctx context.Context, userID uuid.UUID) (model.Wallet, error) {
+func (s *WalletService) CreateWallet(ctx context.Context, userID uuid.UUID) (model.Wallet, []byte, error) {
 	// Create Ethereum wallet
-	privateKeyHex, addressHex, err := s.ethClient.CreateWallet()
+	shareData, addressHex, err := s.tssClient.CreateWallet(ctx, userID.String())
 	if err != nil {
 		logger.Error("Service:CreateWallet", err)
-		return model.Wallet{}, err
+		return model.Wallet{}, nil, err
 	}
-
 	addressHex = strings.ToLower(addressHex)
 
 	// Create wallet in repository
-	return s.walletRepo.CreateWallet(ctx, userID, addressHex, []byte(privateKeyHex), "Default")
+	wallet, err := s.walletRepo.CreateWallet(ctx, userID, addressHex, []byte(""), "Default")
+	if err != nil {
+		logger.Error("Service:CreateWallet", err)
+		return model.Wallet{}, nil, err
+	}
+	return wallet, shareData, nil
 }
 
 func (s *WalletService) GetWalletByUserID(ctx context.Context, userID uuid.UUID) (model.Wallet, error) {

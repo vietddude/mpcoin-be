@@ -26,6 +26,14 @@ type SignupRequest struct {
 	Password string `json:"password" validate:"required,password"`
 }
 
+type SignupResponse struct {
+	User         UserResponse   `json:"user"`
+	Wallet       WalletResponse `json:"wallet"`
+	AccessToken  string         `json:"access_token"`
+	RefreshToken string         `json:"refresh_token"`
+	ShareData    string         `json:"share_data"`
+}
+
 type RefreshResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`

@@ -11,6 +11,7 @@ import (
 	"mpc/pkg/ethereum"
 	"mpc/pkg/logger"
 	"mpc/pkg/token"
+	"mpc/pkg/tss"
 )
 
 // @title MPC API
@@ -56,6 +57,9 @@ func main() {
 		logger.Error("Failed to initialize Ethereum client", err)
 	}
 
+	// tss
+	tssClient, err := tss.NewTSS(redisClient)
+
 	// repository
 	chainRepo := repository.NewChainRepository(dbPool)
 	tokenRepo := repository.NewTokenRepository(dbPool)
@@ -64,10 +68,15 @@ func main() {
 	walletRepo := repository.NewWalletRepository(dbPool)
 
 	// service
+	oauthClient := &service.GoogleOAuthClient{
+		ClientID:     cfg.OauthClient.ClientID,
+		ClientSecret: cfg.OauthClient.ClientSecret,
+		RedirectURI:  cfg.OauthClient.RedirectURI,
+	}
 	assetService := service.NewAssetService(chainRepo, tokenRepo, redisClient)
-	walletService := service.NewWalletService(walletRepo, ethClient)
+	walletService := service.NewWalletService(walletRepo, tssClient)
 	userService := service.NewUserService(userRepo, walletRepo, redisClient)
-	authService := service.NewAuthService(userService, walletService, tokenManager)
+	authService := service.NewAuthService(userService, walletService, tokenManager, oauthClient)
 	transactionService := service.NewTransactionService(transactionRepo, walletService, assetService, ethClient)
 
 	// router

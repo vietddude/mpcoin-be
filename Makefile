@@ -1,7 +1,7 @@
 # Makefile
 .PHONY: migrate-up migrate-down sqlc
 
-DB_URL=postgresql://viet:123@localhost:5432/mpcdev_2?sslmode=disable
+DB_URL=postgresql://viet:123@localhost:5432/mpc?sslmode=disable
 
 migrate-create:
 	@read -p "Enter migration name: " name; \

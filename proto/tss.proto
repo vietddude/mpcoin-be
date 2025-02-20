@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package tss;
+option go_package = "mpc/proto";
+
+service MPCService {
+  // Stream messages between nodes for TSS protocol communication
+  rpc StreamMessages(stream TSSMessage) returns (stream TSSMessage) {}
+  
+  // Notify other nodes to start keygen or signing process
+  rpc NotifyAction(ActionRequest) returns (ActionResponse) {}
+}
+
+message TSSMessage {
+  string session_id = 1;
+  bytes payload = 2;
+  uint32 from = 3;
+  uint32 to = 4;
+  bool broadcast = 5;
+}
+
+message ActionRequest {
+  string session_id = 1;
+  repeated uint32 parties = 2;
+  uint32 threshold = 3;
+  bytes msg_hash = 4;
+  bytes share_data = 5;
+  Action action = 6;
+}
+
+message ActionResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+enum Action {
+  KEYGEN = 0;
+  SIGN = 1;
+  INIT_KEYGEN = 3;
+  INIT_SIGN = 4;
+}

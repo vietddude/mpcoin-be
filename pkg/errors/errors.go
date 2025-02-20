@@ -20,6 +20,7 @@ func NewAppError(code string, message string, status int) *AppError {
 
 // Auth Errors
 var (
+	ErrGoogleOauthFailed = NewAppError("GOOGLE_OAUTH_FAILED", "google oauth failed", 400)
 	ErrUnauthorized      = NewAppError("UNAUTHORIZED", "unauthorized", 401)
 	ErrInvalidPassword   = NewAppError("INVALID_PASSWORD", "invalid password", 401)
 	ErrEmailAlreadyInUse = NewAppError("EMAIL_ALREADY_IN_USE", "email already in use", 409)

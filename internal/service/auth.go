@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"mpc/internal/model"
 	"mpc/pkg/errors"
 	"mpc/pkg/logger"
@@ -16,14 +18,76 @@ type AuthService struct {
 	tokenManager  *token.TokenManager
 	walletService *WalletService
 	userService   *UserService
+	oauthClient   *GoogleOAuthClient
 }
 
-func NewAuthService(userService *UserService, walletService *WalletService, tokenManager *token.TokenManager) *AuthService {
+func NewAuthService(userService *UserService, walletService *WalletService, tokenManager *token.TokenManager, oauthClient *GoogleOAuthClient) *AuthService {
 	return &AuthService{
 		userService:   userService,
 		walletService: walletService,
 		tokenManager:  tokenManager,
+		oauthClient:   oauthClient,
 	}
+}
+
+// Google oauth
+func (s *AuthService) GoogleOauth(ctx context.Context, req *model.GoogleOauth) (model.AuthResponse, error) {
+	// Fetching token for code
+	tokenResponse, err := s.oauthClient.GetOAuthTokens(req.Code)
+	if err != nil {
+		logger.Error("Failed to retrieve token from Google", err)
+		return model.AuthResponse{}, errors.ErrGoogleOauthFailed
+	}
+
+	// Fetching user info
+	userInfo, err := s.oauthClient.GetUserInfo(tokenResponse.AccessToken)
+	if err != nil || !userInfo.VerifiedEmail {
+		logger.Error("Failed to retrieve user info from Google", err)
+		return model.AuthResponse{}, errors.ErrGoogleOauthFailed
+	}
+
+	var user model.User
+	var wallet model.Wallet
+	var shareData []byte
+	// Get user by email
+	user, err = s.userService.GetUserByEmail(ctx, userInfo.Email)
+	if err != nil {
+		logger.Error("Failed to fetch user info", err)
+	}
+	if user.ID == uuid.Nil {
+		// Create user and wallet
+		user, err = s.userService.CreateUser(ctx, userInfo.Email, "")
+		if err != nil {
+			logger.Error("Service:GoogleOauth", err)
+			return model.AuthResponse{}, err
+		}
+
+		wallet, shareData, err = s.walletService.CreateWallet(ctx, user.ID)
+		if err != nil {
+			logger.Error("Service:GoogleOauth", err)
+			return model.AuthResponse{}, err
+		}
+		fmt.Print(shareData)
+	} else {
+		// Get primary wallet
+		wallet, err = s.getPrimaryWallet(ctx, user.ID)
+		if err != nil {
+			logger.Error("Service:GoogleOauth", err)
+			return model.AuthResponse{}, err
+		}
+		if wallet.ID == uuid.Nil {
+			return model.AuthResponse{}, errors.ErrWalletNotFound
+		}
+	}
+
+	// Generate tokens
+	token, err := s.generateTokenPair(ctx, user.ID)
+	if err != nil {
+		logger.Error("Service:GoogleOauth", err)
+		return model.AuthResponse{}, err
+	}
+
+	return s.createAuthResponse(user, wallet, token), nil
 }
 
 // Login login
@@ -64,40 +128,46 @@ func (s *AuthService) Login(ctx context.Context, req *model.LoginRequest) (model
 }
 
 // Signup signup
-func (s *AuthService) Signup(ctx context.Context, req *model.SignupRequest) (model.AuthResponse, error) {
+func (s *AuthService) Signup(ctx context.Context, req *model.SignupRequest) (model.SignupResponse, error) {
 	// Check if email already exists
 	if _, err := s.userService.GetUserByEmail(ctx, req.Email); err == nil {
-		return model.AuthResponse{}, errors.ErrEmailAlreadyInUse
+		return model.SignupResponse{}, errors.ErrEmailAlreadyInUse
 	}
 
 	// Hash password
 	hashedPassword, err := hashPassword(req.Password)
 	if err != nil {
 		logger.Error("Service:Signup", err)
-		return model.AuthResponse{}, err
+		return model.SignupResponse{}, err
 	}
 
 	// Create user and wallet
 	user, err := s.userService.CreateUser(ctx, req.Email, hashedPassword)
 	if err != nil {
 		logger.Error("Service:Signup", err)
-		return model.AuthResponse{}, err
+		return model.SignupResponse{}, err
 	}
 
-	wallet, err := s.walletService.CreateWallet(ctx, user.ID)
+	wallet, shareData, err := s.walletService.CreateWallet(ctx, user.ID)
 	if err != nil {
 		logger.Error("Service:Signup", err)
-		return model.AuthResponse{}, err
+		return model.SignupResponse{}, err
 	}
 
 	// Generate tokens
 	token, err := s.generateTokenPair(ctx, user.ID)
 	if err != nil {
 		logger.Error("Service:Signup", err)
-		return model.AuthResponse{}, err
+		return model.SignupResponse{}, err
 	}
 
-	return s.createAuthResponse(user, wallet, token), nil
+	return model.SignupResponse{
+		User:         utils.ToUserResponse(user),
+		Wallet:       utils.ToWalletResponse(wallet),
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		ShareData:    base64.StdEncoding.EncodeToString(shareData),
+	}, nil
 }
 
 // Refresh refresh

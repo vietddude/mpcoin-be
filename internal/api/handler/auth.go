@@ -53,7 +53,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        request body model.SignupRequest true "Signup credentials"
-// @Success      200  {object}  model.Response{payload=model.AuthResponse}
+// @Success      200  {object}  model.Response{payload=model.SignupResponse}
 // @Failure      400  {object}  model.ErrorResponse
 // @Failure      401  {object}  model.ErrorResponse
 // @Router       /auth/signup [post]

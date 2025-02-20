@@ -42,11 +42,6 @@ type Claims struct {
 
 // GenerateToken generates a JWT for the specified token type and user ID.
 func (tm *TokenManager) GenerateToken(ctx context.Context, userID uuid.UUID, tokenType string) (string, error) {
-	// Revoke existing token first
-	if err := tm.RevokeToken(ctx, userID, tokenType); err != nil {
-		return "", fmt.Errorf("failed to revoke existing token: %w", err)
-	}
-
 	var duration time.Duration
 
 	switch tokenType {
@@ -54,6 +49,10 @@ func (tm *TokenManager) GenerateToken(ctx context.Context, userID uuid.UUID, tok
 		duration = accessTokenDuration
 	case TokenTypeRefresh:
 		duration = refreshTokenDuration
+		// Revoke existing refresh token first
+		if err := tm.RevokeToken(ctx, userID, tokenType); err != nil {
+			return "", fmt.Errorf("failed to revoke existing refresh token: %w", err)
+		}
 	default:
 		return "", errors.New("invalid token type")
 	}
@@ -72,10 +71,12 @@ func (tm *TokenManager) GenerateToken(ctx context.Context, userID uuid.UUID, tok
 		return "", err
 	}
 
-	// Store new token in Redis
-	key := fmt.Sprintf("token:%s:%s", tokenType, userID.String())
-	if err := tm.redis.Set(ctx, key, tokenString, duration).Err(); err != nil {
-		return "", fmt.Errorf("failed to store token in Redis: %w", err)
+	// Store only refresh tokens in Redis
+	if tokenType == TokenTypeRefresh {
+		key := fmt.Sprintf("token:%s:%s", tokenType, userID.String())
+		if err := tm.redis.Set(ctx, key, tokenString, duration).Err(); err != nil {
+			return "", fmt.Errorf("failed to store refresh token in Redis: %w", err)
+		}
 	}
 
 	return tokenString, nil
@@ -99,14 +100,16 @@ func (tm *TokenManager) VerifyToken(ctx context.Context, tokenString, tokenType 
 		return uuid.Nil, errors.New("invalid token")
 	}
 
-	// Check if token exists in Redis
-	key := fmt.Sprintf("token:%s:%s", tokenType, claims.UserID.String())
-	storedToken, err := tm.redis.Get(ctx, key).Result()
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to check token in Redis: %w", err)
-	}
-	if storedToken != tokenString {
-		return uuid.Nil, errors.New("token has been revoked")
+	// Check Redis only for refresh tokens
+	if tokenType == TokenTypeRefresh {
+		key := fmt.Sprintf("token:%s:%s", tokenType, claims.UserID.String())
+		storedToken, err := tm.redis.Get(ctx, key).Result()
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("failed to check refresh token in Redis: %w", err)
+		}
+		if storedToken != tokenString {
+			return uuid.Nil, errors.New("refresh token has been revoked")
+		}
 	}
 
 	return claims.UserID, nil
@@ -130,26 +133,30 @@ func (tm *TokenManager) GenerateTokenPair(ctx context.Context, userID uuid.UUID)
 	}, nil
 }
 
-// RevokeToken invalidates a token by removing it from Redis
+// RevokeToken invalidates a refresh token by removing it from Redis
 func (tm *TokenManager) RevokeToken(ctx context.Context, userID uuid.UUID, tokenType string) error {
+	if tokenType != TokenTypeRefresh {
+		return nil // Only revoke refresh tokens
+	}
+
 	key := fmt.Sprintf("token:%s:%s", tokenType, userID.String())
 	if err := tm.redis.Del(ctx, key).Err(); err != nil {
-		return fmt.Errorf("failed to revoke token: %w", err)
+		return fmt.Errorf("failed to revoke refresh token: %w", err)
 	}
 	return nil
 }
 
-// RevokeAllUserTokens invalidates all tokens for a user
+// RevokeAllUserTokens invalidates all refresh tokens for a user
 func (tm *TokenManager) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error {
 	pattern := fmt.Sprintf("token:%s:*", userID.String())
 	keys, err := tm.redis.Keys(ctx, pattern).Result()
 	if err != nil {
-		return fmt.Errorf("failed to get user tokens: %w", err)
+		return fmt.Errorf("failed to get user refresh tokens: %w", err)
 	}
 
 	if len(keys) > 0 {
 		if err := tm.redis.Del(ctx, keys...).Err(); err != nil {
-			return fmt.Errorf("failed to revoke user tokens: %w", err)
+			return fmt.Errorf("failed to revoke user refresh tokens: %w", err)
 		}
 	}
 	return nil
