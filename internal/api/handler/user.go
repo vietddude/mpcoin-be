@@ -29,12 +29,15 @@ func NewUserHandler(userService *service.UserService) *UserHandler {
 // @Failure      401  {object}  model.ErrorResponse
 // @Router       /user [get]
 func (h *UserHandler) GetUser(c *gin.Context) {
-	userID := h.GetUserID(c)
-
+	userID, err := h.GetUserID(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
 	// Handle the request using the optimized request handler
 	res, err := h.userService.GetUser(c.Request.Context(), userID)
 	if err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 	h.SuccessResponse(c, res)

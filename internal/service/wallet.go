@@ -24,12 +24,12 @@ func NewWalletService(walletRepo *repository.WalletRepository, tssClient *tss.TS
 	}
 }
 
-func (s *WalletService) CreateWallet(ctx context.Context, userID uuid.UUID) (model.Wallet, []byte, error) {
+func (s *WalletService) CreateWallet(ctx context.Context, userID uuid.UUID) (model.Wallet, string, error) {
 	// Create Ethereum wallet
 	shareData, addressHex, err := s.tssClient.CreateWallet(ctx, userID.String())
 	if err != nil {
 		logger.Error("Service:CreateWallet", err)
-		return model.Wallet{}, nil, err
+		return model.Wallet{}, "", err
 	}
 	addressHex = strings.ToLower(addressHex)
 
@@ -37,7 +37,7 @@ func (s *WalletService) CreateWallet(ctx context.Context, userID uuid.UUID) (mod
 	wallet, err := s.walletRepo.CreateWallet(ctx, userID, addressHex, []byte(""), "Default")
 	if err != nil {
 		logger.Error("Service:CreateWallet", err)
-		return model.Wallet{}, nil, err
+		return model.Wallet{}, "", err
 	}
 	return wallet, shareData, nil
 }

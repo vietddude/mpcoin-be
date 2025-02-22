@@ -2,7 +2,6 @@ package handler
 
 import (
 	"mpc/pkg/errors"
-	"mpc/pkg/logger"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -16,33 +15,19 @@ func NewBaseHandler() BaseHandler {
 	return BaseHandler{}
 }
 
-func (h *BaseHandler) GetUserID(c *gin.Context) uuid.UUID {
-	userID, ok := c.Get("user_id")
+// GetUserID extracts user ID from context with error handling
+func (h *BaseHandler) GetUserID(c *gin.Context) (uuid.UUID, error) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		return uuid.Nil, errors.ErrUnauthorized
+	}
+
+	id, ok := userID.(uuid.UUID)
 	if !ok {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"error":      "Unauthorized",
-			"error_code": "UNAUTHORIZED",
-		})
-	}
-	return userID.(uuid.UUID)
-}
-
-// HandleError handle error and send error response
-func (h *BaseHandler) HandleError(c *gin.Context, err error) {
-	logger.Error("error", err)
-	if appErr, ok := err.(*errors.AppError); ok {
-		c.JSON(appErr.Status, gin.H{
-			"error":      appErr.Message,
-			"error_code": appErr.Code,
-		})
-		return
+		return uuid.Nil, errors.NewAppError("INVALID_USER_ID", "Invalid user ID format", http.StatusBadRequest)
 	}
 
-	// Default error handling for non-AppError types
-	c.JSON(http.StatusInternalServerError, gin.H{
-		"error":      "Internal server error",
-		"error_code": "INTERNAL_SERVER_ERROR",
-	})
+	return id, nil
 }
 
 // SuccessResponse send success response

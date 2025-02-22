@@ -34,13 +34,13 @@ func NewAuthHandler(authService *service.AuthService) *AuthHandler {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req model.LoginRequest
 	if err := utils.ValidateBody(c, &req); err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 
 	res, err := h.authService.Login(c.Request.Context(), &req)
 	if err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 	h.SuccessResponse(c, res)
@@ -60,13 +60,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Signup(c *gin.Context) {
 	var req model.SignupRequest
 	if err := utils.ValidateBody(c, &req); err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 
 	res, err := h.authService.Signup(c.Request.Context(), &req)
 	if err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 	h.SuccessResponse(c, res)
@@ -86,12 +86,12 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req model.Refresh
 	if err := utils.ValidateBody(c, &req); err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 	res, err := h.authService.Refresh(c.Request.Context(), &req)
 	if err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 	h.SuccessResponse(c, res)

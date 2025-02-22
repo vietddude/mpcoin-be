@@ -43,4 +43,5 @@ type CreateAndSubmitTransactionRequest struct {
 	ChainID     int    `json:"chain_id" validate:"required"`
 	Symbol      string `json:"symbol" validate:"required"`
 	Amount      string `json:"amount" validate:"required"`
+	ShareData   string `json:"share_data" validate:"required"`
 }

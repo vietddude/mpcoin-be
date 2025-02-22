@@ -34,7 +34,11 @@ func NewTransactionHandler(txnService *service.TransactionService) *TransactionH
 // @Failure      400  {object}  model.ErrorResponse
 // @Router       /transactions [get]
 func (h *TransactionHandler) GetTransactions(c *gin.Context) {
-	userID := h.GetUserID(c)
+	userID, err := h.GetUserID(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
 
 	chainID, _ := strconv.Atoi(c.DefaultQuery("chain_id", "11155111"))
 	walletAddress := c.Query("wallet_address")
@@ -43,7 +47,7 @@ func (h *TransactionHandler) GetTransactions(c *gin.Context) {
 
 	res, err := h.txnService.GetTransactions(c.Request.Context(), userID, chainID, walletAddress, page, pageSize)
 	if err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 	h.SuccessResponse(c, res)
@@ -60,17 +64,20 @@ func (h *TransactionHandler) GetTransactions(c *gin.Context) {
 // @Failure      400  {object}  model.ErrorResponse
 // @Router       /transactions [post]
 func (h *TransactionHandler) CreateAndSubmitTransaction(c *gin.Context) {
-	userID := h.GetUserID(c)
-
+	userID, err := h.GetUserID(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
 	var req model.CreateAndSubmitTransactionRequest
 	if err := utils.ValidateBody(c, &req); err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 
 	res, err := h.txnService.CreateAndSubmitTransaction(c.Request.Context(), userID, req)
 	if err != nil {
-		h.HandleError(c, err)
+		c.Error(err)
 		return
 	}
 	h.SuccessResponse(c, res)

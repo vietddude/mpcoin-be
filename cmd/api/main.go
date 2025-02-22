@@ -59,6 +59,9 @@ func main() {
 
 	// tss
 	tssClient, err := tss.NewTSS(redisClient)
+	if err != nil {
+		logger.Error("Failed to initialize TSS client", err)
+	}
 
 	// repository
 	chainRepo := repository.NewChainRepository(dbPool)
@@ -77,7 +80,7 @@ func main() {
 	walletService := service.NewWalletService(walletRepo, tssClient)
 	userService := service.NewUserService(userRepo, walletRepo, redisClient)
 	authService := service.NewAuthService(userService, walletService, tokenManager, oauthClient)
-	transactionService := service.NewTransactionService(transactionRepo, walletService, assetService, ethClient)
+	transactionService := service.NewTransactionService(transactionRepo, walletService, assetService, ethClient, tssClient)
 
 	// router
 	router := api.NewRouter(authService, assetService, userService, transactionService, tokenManager)

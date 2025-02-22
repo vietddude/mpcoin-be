@@ -54,7 +54,7 @@ func NewTSS(redisClient *rd.Client) (*TSS, error) {
 }
 
 // CreateWallet initiates key generation for a new wallet
-func (t *TSS) CreateWallet(ctx context.Context, sessionID string) (shareData []byte, publicKey string, err error) {
+func (t *TSS) CreateWallet(ctx context.Context, sessionID string) (shareData string, publicKey string, err error) {
 	// Set up context with timeout
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
@@ -67,7 +67,7 @@ func (t *TSS) CreateWallet(ctx context.Context, sessionID string) (shareData []b
 		Action:    pb.Action_INIT_KEYGEN,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to notify keygen action: %w", err)
+		return "", "", fmt.Errorf("failed to notify keygen action: %w", err)
 	}
 
 	// Subscribe to keygen results channel
@@ -79,25 +79,30 @@ func (t *TSS) CreateWallet(ctx context.Context, sessionID string) (shareData []b
 	// Wait for results with timeout
 	shareData, publicKey, err = processKeygenResult(ctx, pubsub.Channel())
 	if err != nil {
-		return nil, "", fmt.Errorf("key generation failed: %w", err)
+		return "", "", fmt.Errorf("key generation failed: %w", err)
 	}
 
 	return shareData, publicKey, nil
 }
 
 // Sign creates a threshold signature for the given message
-func (t *TSS) Sign(ctx context.Context, sessionID string, shareData []byte, message []byte) ([]byte, error) {
+func (t *TSS) Sign(ctx context.Context, sessionID string, shareData string, message []byte) ([]byte, error) {
 	// Set up context with timeout
 	ctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
+	encryptedShare, err := base64.StdEncoding.DecodeString(shareData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode share data: %w", err)
+	}
+
 	// Notify signing action
-	_, err := t.rpcClient.NotifyAction(ctx, &pb.ActionRequest{
+	_, err = t.rpcClient.NotifyAction(ctx, &pb.ActionRequest{
 		SessionId: sessionID,
 		Parties:   t.config.Parties,
 		Threshold: t.config.Threshold,
 		MsgHash:   message,
-		ShareData: shareData,
+		ShareData: encryptedShare,
 		Action:    pb.Action_INIT_SIGN,
 	})
 	if err != nil {
@@ -119,14 +124,14 @@ func (t *TSS) Sign(ctx context.Context, sessionID string, shareData []byte, mess
 }
 
 // processKeygenResult handles the keygen result from Redis PubSub
-func processKeygenResult(ctx context.Context, ch <-chan *redis.Message) ([]byte, string, error) {
+func processKeygenResult(ctx context.Context, ch <-chan *redis.Message) (string, string, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, "", ctx.Err()
+			return "", "", ctx.Err()
 		case msg, ok := <-ch:
 			if !ok {
-				return nil, "", fmt.Errorf("channel closed")
+				return "", "", fmt.Errorf("channel closed")
 			}
 
 			var result map[string]string
@@ -145,14 +150,7 @@ func processKeygenResult(ctx context.Context, ch <-chan *redis.Message) ([]byte,
 				continue // Incomplete message, wait for next one
 			}
 
-			// Decode base64 share
-			decodedShare, err := base64.StdEncoding.DecodeString(shareData)
-			if err != nil {
-				log.Printf("Warning: Failed to decode base64 share: %v", err)
-				continue
-			}
-
-			return decodedShare, publicKey, nil
+			return shareData, publicKey, nil
 		}
 	}
 }

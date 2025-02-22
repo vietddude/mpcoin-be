@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/base64"
-	"fmt"
 	"mpc/internal/model"
 	"mpc/pkg/errors"
 	"mpc/pkg/logger"
@@ -48,7 +46,6 @@ func (s *AuthService) GoogleOauth(ctx context.Context, req *model.GoogleOauth) (
 
 	var user model.User
 	var wallet model.Wallet
-	var shareData []byte
 	// Get user by email
 	user, err = s.userService.GetUserByEmail(ctx, userInfo.Email)
 	if err != nil {
@@ -62,12 +59,11 @@ func (s *AuthService) GoogleOauth(ctx context.Context, req *model.GoogleOauth) (
 			return model.AuthResponse{}, err
 		}
 
-		wallet, shareData, err = s.walletService.CreateWallet(ctx, user.ID)
+		wallet, _, err = s.walletService.CreateWallet(ctx, user.ID)
 		if err != nil {
 			logger.Error("Service:GoogleOauth", err)
 			return model.AuthResponse{}, err
 		}
-		fmt.Print(shareData)
 	} else {
 		// Get primary wallet
 		wallet, err = s.getPrimaryWallet(ctx, user.ID)
@@ -166,7 +162,7 @@ func (s *AuthService) Signup(ctx context.Context, req *model.SignupRequest) (mod
 		Wallet:       utils.ToWalletResponse(wallet),
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
-		ShareData:    base64.StdEncoding.EncodeToString(shareData),
+		ShareData:    shareData,
 	}, nil
 }
 

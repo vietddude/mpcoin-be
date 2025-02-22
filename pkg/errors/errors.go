@@ -50,4 +50,5 @@ var (
 	ErrInvalidWallet       = NewAppError("INVALID_WALLET", "invalid wallet", 400)
 	ErrInvalidAmount       = NewAppError("INVALID_AMOUNT", "invalid amount", 400)
 	ErrInvalidAddress      = NewAppError("INVALID_ADDRESS", "invalid address", 400)
+	ErrInssuficientBalance = NewAppError("INSUFFICIENT_BALANCE", "insufficient balance", 400)
 )

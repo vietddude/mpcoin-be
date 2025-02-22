@@ -29,6 +29,7 @@ func NewRouter(
 
 	// Use our custom logger and recovery middleware
 	router.Use(middleware.Logger())
+	router.Use(middleware.ErrorHandler())
 	router.Use(gin.Recovery())
 
 	healthHandler := handler.NewHealthHandler()
