@@ -68,6 +68,15 @@ func (r *WalletRepository) GetWalletByAddress(ctx context.Context, address strin
 	return toWalletModel(wallet), nil
 }
 
+// GetAllAddresses retrieves all addresses
+func (r *WalletRepository) GetAllAddresses(ctx context.Context) ([]string, error) {
+	addresses, err := r.queries.GetAllAddresses(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all addresses: %w", err)
+	}
+	return addresses, nil
+}
+
 // toWalletModel converts a sqlc wallet to a model wallet
 func toWalletModel(sqlcWallet db.Wallet) model.Wallet {
 	return model.Wallet{

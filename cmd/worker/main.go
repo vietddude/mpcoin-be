@@ -1,214 +1,172 @@
-// package main
-
-// import (
-// 	"context"
-// 	"fmt"
-// 	"log"
-// 	"math/big"
-// 	"sync"
-
-// 	"github.com/ethereum/go-ethereum/common"
-// 	"github.com/ethereum/go-ethereum/core/types"
-// 	"github.com/ethereum/go-ethereum/ethclient"
-// )
-
-// // Kiểm tra xem một địa chỉ có trong mảng địa chỉ không
-// func isAddressInList(address common.Address, addressList map[common.Address]struct{}) bool {
-// 	_, exists := addressList[address]
-// 	return exists
-// }
-
-// // Xử lý các giao dịch chuyển ETH trong một dải block
-// func processBlockRange(client *ethclient.Client, startBlock, endBlock uint64, addressList map[common.Address]struct{}, wg *sync.WaitGroup) {
-// 	defer wg.Done()
-
-// 	// Lặp qua các block từ startBlock đến endBlock
-// 	for i := startBlock; i <= endBlock; i++ {
-// 		block, err := client.BlockByNumber(context.Background(), big.NewInt(int64(i)))
-// 		if err != nil {
-// 			log.Printf("Error getting block %d: %v", i, err)
-// 			continue
-// 		}
-// 		// Lấy Network ID (chainID)
-// 		networkID, err := client.NetworkID(context.Background())
-// 		if err != nil {
-// 			log.Fatal(err)
-// 		}
-
-// 		// Tạo signer với chainID
-// 		signer := types.NewEIP155Signer(networkID)
-
-// 		// Lặp qua các giao dịch trong block
-// 		for _, tx := range block.Transactions() {
-// 			// Kiểm tra địa chỉ `from` trong giao dịch
-// 			from, err := types.Sender(signer, tx)
-// 			if err != nil {
-// 				log.Printf("Error getting sender of tx %s: %v", tx.Hash().Hex(), err)
-// 				continue
-// 			}
-
-// 			// Nếu `from` hoặc `to` có trong danh sách thì hiển thị
-// 			if isAddressInList(from, addressList) || (tx.To() != nil && isAddressInList(*tx.To(), addressList)) {
-// 				fmt.Println("Transaction Hash:", tx.Hash().Hex())
-// 				fmt.Println("From:", from.Hex())
-// 				if to := tx.To(); to != nil {
-// 					fmt.Println("To:", to.Hex())
-// 				}
-// 			}
-// 		}
-// 	}
-// }
-
-// // Quét các block từ startBlock đến block hiện tại
-// func watchTransactionsFromBlock(client *ethclient.Client, startBlock uint64, addressList map[common.Address]struct{}) {
-// 	// Lấy block hiện tại
-// 	currentBlock, err := client.BlockByNumber(context.Background(), nil) // Block hiện tại
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	// Tính số block mỗi lần quét (số block cần xử lý song song)
-// 	blockRangeSize := uint64(100) // Số block trong một lần quét
-
-// 	var wg sync.WaitGroup
-
-// 	// Lặp qua các block ranges để xử lý song song
-// 	for start := startBlock; start <= currentBlock.NumberU64(); start += blockRangeSize {
-// 		end := start + blockRangeSize - 1
-// 		if end > currentBlock.NumberU64() {
-// 			end = currentBlock.NumberU64()
-// 		}
-
-// 		wg.Add(1)
-// 		go processBlockRange(client, start, end, addressList, &wg)
-// 	}
-
-// 	// Chờ tất cả goroutines hoàn thành
-// 	wg.Wait()
-// }
-
-// func main() {
-// 	// Kết nối tới client Ethereum
-// 	client, err := ethclient.Dial("wss://sepolia.gateway.tenderly.co")
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer client.Close()
-
-// 	// Danh sách các địa chỉ ví để theo dõi
-// 	addresses := []string{
-// 		"0xFB122130C4d28860dbC050A8e024A71a558eB0C1",
-// 	}
-
-// 	// Chuyển đổi địa chỉ ví sang common.Address và tạo map cho việc tìm kiếm nhanh
-// 	addressList := make(map[common.Address]struct{})
-// 	for _, address := range addresses {
-// 		addressList[common.HexToAddress(address)] = struct{}{}
-// 	}
-
-// 	// Gọi hàm theo dõi giao dịch từ block bắt đầu
-// 	startBlock := uint64(7203228) // Block bắt đầu từ đây
-// 	watchTransactionsFromBlock(client, startBlock, addressList)
-// }
-
 package main
 
 import (
 	"context"
 	"fmt"
 	"log"
+	"math/big"
+	"mpc/internal/config"
+	"mpc/internal/db"
+	"mpc/internal/db/redis"
+	"mpc/internal/model"
+	"mpc/internal/repository"
+	"mpc/pkg/logger"
+	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// Kiểm tra xem một địa chỉ có trong mảng địa chỉ không
-func isAddressInList(address common.Address, addressList map[common.Address]struct{}) bool {
-	_, exists := addressList[address]
-	return exists
+const (
+	infuraURL = "https://sepolia.infura.io/v3/6c89fb7fa351451f939eea9da6bee755"
+)
+
+var (
+	ctx                = context.Background()
+	redisClient        *redis.Client
+	monitoredAddresses map[common.Address]bool
+	txnRepo            *repository.TransactionRepository
+	walletRepo         *repository.WalletRepository
+)
+
+func main() {
+	logger.Info("Starting worker")
+
+	// Load config
+	logger.Info("Loading config")
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Error("Failed to load config", err)
+	}
+
+	// Initialize database
+	logger.Info("Initializing database")
+	dbPool, err := db.InitDB(&cfg.DB)
+	if err != nil {
+		logger.Error("Failed to initialize database", err)
+	}
+	defer db.CloseDB()
+
+	txnRepo = repository.NewTransactionRepository(dbPool)
+	walletRepo = repository.NewWalletRepository(dbPool)
+
+	// Initialize Redis
+	logger.Info("Initializing Redis client")
+	redisClient, err = redis.NewRedisClient(&cfg.Redis)
+	if err != nil {
+		logger.Error("Failed to initialize Redis client", err)
+	}
+	defer redisClient.Close()
+
+	// Load addresses into Redis
+	if err := loadAddressesToRedis(); err != nil {
+		log.Fatalf("Failed to load addresses: %v", err)
+	}
+
+	go updateCachePeriodically()
+
+	// Connect to Ethereum client
+	client, err := ethclient.Dial(infuraURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Infura: %v", err)
+	}
+	defer client.Close()
+
+	fmt.Println("Starting transaction scanner...")
+
+	for {
+		checkLatestBlock(client)
+		time.Sleep(10 * time.Second)
+	}
 }
 
-func watchTransactions(client *ethclient.Client, addressList map[common.Address]struct{}) {
-	headers := make(chan *types.Header)
-	sub, err := client.SubscribeNewHead(context.Background(), headers)
+func loadAddressesToRedis() error {
+	rows, err := walletRepo.GetAllAddresses(ctx)
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer sub.Unsubscribe()
-
-	// Lấy Network ID (chainID)
-	networkID, err := client.NetworkID(context.Background())
-	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	// Tạo signer với chainID
-	signer := types.NewEIP155Signer(networkID)
+	var addresses []string
+	addresses = append(addresses, rows...)
+	fmt.Printf("Loaded %d addresses\n", len(addresses))
+	if len(addresses) > 0 {
+		redisClient.Del(ctx, "monitored_addresses")
+		redisClient.SAdd(ctx, "monitored_addresses", addresses)
+	}
+	return nil
+}
 
-	// Theo dõi các block mới
+func getMonitoredAddressesFromRedis() (map[common.Address]bool, error) {
+	addresses, err := redisClient.SMembers(ctx, "monitored_addresses").Result()
+	if err != nil {
+		return nil, err
+	}
+
+	addressMap := make(map[common.Address]bool)
+	for _, addr := range addresses {
+		addressMap[common.HexToAddress(addr)] = true
+	}
+	return addressMap, nil
+}
+
+func updateCachePeriodically() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+
 	for {
-		select {
-		case err := <-sub.Err():
-			log.Fatal(err)
-		case header := <-headers:
-			// Lấy thông tin block từ header mới
-			block, err := client.BlockByHash(context.Background(), header.Hash())
-			if err != nil {
-				log.Fatal(err)
+		<-ticker.C
+		if err := loadAddressesToRedis(); err != nil {
+			log.Printf("Error updating Redis cache: %v", err)
+		} else {
+			log.Println("Updated monitored addresses in Redis")
+		}
+	}
+}
+
+func checkLatestBlock(client *ethclient.Client) {
+	monitoredAddresses, _ = getMonitoredAddressesFromRedis()
+
+	block, err := client.BlockByNumber(ctx, nil)
+	if err != nil {
+		log.Printf("Error getting latest block: %v", err)
+		return
+	}
+
+	fmt.Printf("Scanning Block #%d...\n", block.NumberU64())
+
+	for _, tx := range block.Transactions() {
+		if tx.To() == nil {
+			continue
+		}
+
+		from, err := client.TransactionSender(ctx, tx, block.Header().Hash(), 0)
+		if err != nil {
+			log.Printf("Error getting sender: %v", err)
+			continue
+		}
+
+		to := *tx.To()
+		if monitoredAddresses[from] || monitoredAddresses[to] {
+			fmt.Printf("Transaction Found! Hash: %s, From: %s, To: %s, Value: %s ETH\n",
+				tx.Hash().Hex(), from.Hex(), to.Hex(), weiToEth(tx.Value()))
+
+			// Save transaction to database
+			txn := model.Transaction{
+				TxHash:      strings.ToLower(tx.Hash().Hex()),
+				FromAddress: strings.ToLower(from.Hex()),
+				ToAddress:   strings.ToLower(to.Hex()),
+				ChainID:     11155111,
 			}
-
-			// Xử lý các giao dịch trong block mới
-			for _, tx := range block.Transactions() {
-				// Lấy sender của giao dịch
-				from, err := types.Sender(signer, tx)
-				if err != nil {
-					continue
-				}
-
-				// Kiểm tra xem từ địa chỉ hoặc tới địa chỉ có trong danh sách không
-				// if isAddressInList(from, addressList) {
-				// 	fmt.Println("Transaction Hash:", tx.Hash().Hex())
-				// 	fmt.Println("From:", from.Hex())
-				// }
-				// if to := tx.To(); to != nil && isAddressInList(*to, addressList) {
-				// 	fmt.Println("To:", to.Hex())
-				// }
-
-				fmt.Println("Transaction Hash:", tx.Hash().Hex())
-				fmt.Println("From:", from.Hex())
-				if to := tx.To(); to != nil {
-					fmt.Println("To:", to.Hex())
-				}
-				fmt.Print("Timestamp: ", block.Time(), "\n-----------------\n")
+			if _, err := txnRepo.CreateTransaction(ctx, txn); err != nil {
+				log.Printf("Error saving transaction: %v", err)
 			}
 		}
 	}
 }
 
-func processTransaction(txHash string, from string, to string, timestamp uint64) {
-
-}
-
-func main() {
-	// Kết nối tới client Ethereum
-	client, err := ethclient.Dial("wss://ethereum-sepolia-rpc.publicnode.com")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
-
-	// Danh sách các địa chỉ ví để theo dõi
-	addresses := []string{
-		"0xFB122130C4d28860dbC050A8e024A71a558eB0C1",
-	}
-
-	// Chuyển đổi địa chỉ ví sang common.Address và tạo map cho việc tìm kiếm nhanh
-	addressList := make(map[common.Address]struct{})
-	for _, address := range addresses {
-		addressList[common.HexToAddress(address)] = struct{}{}
-	}
-
-	// Gọi hàm theo dõi giao dịch từ các block mới
-	watchTransactions(client, addressList)
+func weiToEth(wei *big.Int) string {
+	ethValue := new(big.Float).SetInt(wei)
+	ethValue.Quo(ethValue, big.NewFloat(1e18))
+	return ethValue.Text('f', 6)
 }

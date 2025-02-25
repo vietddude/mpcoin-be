@@ -31,3 +31,6 @@ UPDATE wallets SET
     status = $5,
     updated_at = $6
 WHERE id = $1 RETURNING *;
+
+-- name: GetAllAddresses :many
+SELECT address FROM wallets;

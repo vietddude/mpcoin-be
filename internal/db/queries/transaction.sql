@@ -5,8 +5,8 @@ RETURNING *;
 
 -- name: GetTransactionsByWalletAddress :many
 SELECT * FROM transactions 
-WHERE from_address = $1 OR to_address = $1
-  AND ($2::int IS NULL OR chain_id = $2)
+WHERE (from_address = $1 OR to_address = $1) 
+AND ($2::int IS NULL OR chain_id = $2)
 ORDER BY created_at DESC
 LIMIT $3
 OFFSET $4;
