@@ -11,6 +11,17 @@ services:
       - db
       - redis
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["./main", "worker"]
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
   db:
     image: postgres:13
     environment:
